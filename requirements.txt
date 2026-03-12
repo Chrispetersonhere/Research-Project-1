@@ -1,0 +1,6 @@
+wrds>=3.2.0
+pandas>=2.1.0
+numpy>=1.26.0
+statsmodels>=0.14.0
+python-dotenv>=1.0.0
+pyarrow>=16.0.0
