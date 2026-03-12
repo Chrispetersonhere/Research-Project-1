@@ -50,7 +50,8 @@ python src/board_interconnectedness_analysis.py \
   --director-table your_schema.your_table \
   --director-id-col your_director_id \
   --director-gvkey-col your_gvkey \
-  --director-year-col your_year
+  --director-year-col your_year \
+  --min-board-size 3
 ```
 
 ## Outputs
@@ -61,7 +62,7 @@ python src/board_interconnectedness_analysis.py \
 
 ### Board pipeline
 - `output/sp500_board_interlock_panel.parquet`: firm-year panel with interlock and return fields.
-- `output/board_interlock_yearly_summary.csv`: yearly means of interlock intensity and returns.
+- `output/board_interlock_yearly_summary.csv`: yearly means of interlock intensity and returns (after board-size filter used for estimation).
 - `output/board_interlock_regression.txt`: regression output and interpretation (`helps`, `hurts`, or `no statistically significant effect`).
 
 ## Notes on Identification and Interpretation

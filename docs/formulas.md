@@ -32,6 +32,7 @@ where \(r_{j,T+m}\) is CRSP monthly return in month \(m\) after fiscal year-end.
 
 - Dependent variable: log total compensation (`tdc1`).
 - \(X_{i,f,t}\): controls (`age`, pay scale proxy).
+- Sample filter: firm-years with `BoardSize >= min_board_size` (default 3).
 - \(\delta_t\): year fixed effects.
 - Standard errors: clustered by firm (`gvkey`).
 
@@ -82,6 +83,12 @@ PctInterlocked_{f,t} = \frac{1}{|D_{f,t}|} \sum_{d \in D_{f,t}} \mathbb{1}[Outsi
 
 where \(D_{f,t}\) is the set of directors on firm \(f\)'s board in year \(t\).
 
+Total outside seats:
+\[
+TotalOutsideSeats_{f,t} = \sum_{d \in D_{f,t}} OutsideSeats_{d,f,t}
+\]
+
+
 ## 7) Annual Buy-and-Hold Return
 For firm-security \(j\) in calendar year \(t\):
 \[
@@ -98,6 +105,7 @@ Fwd1YBHAR_{f,t} = AnnualBHAR_{f,t+1}
 Fwd1YBHAR_{f,t} = \alpha + \beta_1 AvgOutsideSeats_{f,t} + \beta_2 PctInterlocked_{f,t} + \beta_3 BoardSize_{f,t} + \delta_t + \varepsilon_{f,t}
 \]
 
+- Sample filter: firm-years with `BoardSize >= min_board_size` (default 3).
 - \(\delta_t\): year fixed effects.
 - Standard errors: clustered by firm (`gvkey`).
 

@@ -30,6 +30,7 @@ class AnalysisConfig:
     director_id_col: str = "dirid"
     director_gvkey_col: str = "gvkey"
     director_year_col: str = "year"
+    min_board_size: int = 3
 
 
 def connect_wrds(username: Optional[str]) -> wrds.Connection:
@@ -126,6 +127,7 @@ def compute_interlock_metrics(sp500_firm_year: pd.DataFrame, director_panel: pd.
             board_size=("director_id", "nunique"),
             avg_outside_board_seats=("outside_seats", "mean"),
             pct_interlocked_directors=("is_interlocked", "mean"),
+            total_outside_board_seats=("outside_seats", "sum"),
         )
         .reset_index()
     )
@@ -156,13 +158,19 @@ def pull_annual_returns(conn: wrds.Connection, start_year: int, end_year: int) -
 def build_analysis_panel(interlocks: pd.DataFrame, sp500: pd.DataFrame, annual_returns: pd.DataFrame) -> pd.DataFrame:
     panel = sp500.merge(interlocks, on=["gvkey", "year"], how="left")
     panel = panel.merge(annual_returns, on=["permno", "year"], how="left")
-    panel = panel.sort_values(["gvkey", "year"]).copy()
-    panel["fwd_1y_bhar"] = panel.groupby("gvkey")["annual_bhar"].shift(-1)
+    panel = panel.drop_duplicates(subset=["gvkey", "year", "permno"]).copy()
+
+    next_returns = annual_returns.rename(columns={"year": "return_year", "annual_bhar": "fwd_1y_bhar"}).copy()
+    next_returns["year"] = next_returns["return_year"] - 1
+    panel = panel.merge(next_returns[["permno", "year", "fwd_1y_bhar"]], on=["permno", "year"], how="left")
     return panel
 
 
-def run_regression(panel: pd.DataFrame):
-    model_df = panel.dropna(subset=["fwd_1y_bhar", "avg_outside_board_seats", "pct_interlocked_directors"]).copy()
+def run_regression(panel: pd.DataFrame, min_board_size: int):
+    model_df = panel.dropna(
+        subset=["fwd_1y_bhar", "avg_outside_board_seats", "pct_interlocked_directors", "board_size"]
+    ).copy()
+    model_df = model_df[model_df["board_size"] >= min_board_size].copy()
     formula = (
         "fwd_1y_bhar ~ avg_outside_board_seats + pct_interlocked_directors + board_size + C(year)"
     )
@@ -213,6 +221,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--director-id-col", default="dirid")
     parser.add_argument("--director-gvkey-col", default="gvkey")
     parser.add_argument("--director-year-col", default="year")
+    parser.add_argument("--min-board-size", type=int, default=3)
     return parser.parse_args()
 
 
@@ -226,6 +235,7 @@ def main() -> None:
         director_id_col=args.director_id_col,
         director_gvkey_col=args.director_gvkey_col,
         director_year_col=args.director_year_col,
+        min_board_size=args.min_board_size,
     )
 
     conn = connect_wrds(args.wrds_username)
@@ -243,7 +253,7 @@ def main() -> None:
         interlocks = compute_interlock_metrics(sp500, directors)
         annual_returns = pull_annual_returns(conn, cfg.start_year, cfg.end_year + 1)
         panel = build_analysis_panel(interlocks, sp500, annual_returns)
-        model, model_df = run_regression(panel)
+        model, model_df = run_regression(panel, cfg.min_board_size)
         save_outputs(panel, model_df, model, cfg.output_dir)
     finally:
         conn.close()
