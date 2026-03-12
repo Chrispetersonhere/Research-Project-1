@@ -65,7 +65,7 @@ def pull_execucomp_ceos(conn: wrds.Connection, start_year: int, end_year: int) -
             a.becameceo,
             a.leftofc
         FROM comp.execucomp_anncomp AS a
-        WHERE a.fyear BETWEEN {start_year} AND {end_year}
+        WHERE a.fyear <= {end_year}
           AND a.ceoann = 'CEO'
           AND a.execid IS NOT NULL
           AND a.tdc1 IS NOT NULL
@@ -116,9 +116,19 @@ def merge_returns(ceos: pd.DataFrame, ccm: pd.DataFrame, msf: pd.DataFrame) -> p
     ccm2 = ccm.copy()
     ccm2["linkdt"] = pd.to_datetime(ccm2["linkdt"])
     ccm2["linkenddt"] = pd.to_datetime(ccm2["linkenddt"]).fillna(pd.Timestamp("today"))
+    ccm2["linkprim_rank"] = ccm2["linkprim"].map({"P": 0, "C": 1}).fillna(9)
 
-    panel = panel.merge(ccm2[["gvkey", "permno", "linkdt", "linkenddt"]], on="gvkey", how="left")
+    panel = panel.merge(
+        ccm2[["gvkey", "permno", "linkdt", "linkenddt", "linkprim", "linkprim_rank"]],
+        on="gvkey",
+        how="left",
+    )
     panel = panel[(panel["datadate"] >= panel["linkdt"]) & (panel["datadate"] <= panel["linkenddt"])]
+    panel = panel.sort_values(
+        ["gvkey", "execid", "fyear", "linkprim_rank", "linkdt", "permno"],
+        ascending=[True, True, True, True, False, True],
+    )
+    panel = panel.drop_duplicates(subset=["gvkey", "execid", "fyear"], keep="first")
 
     msf2 = msf.copy()
     msf2["ret"] = pd.to_numeric(msf2["ret"], errors="coerce")
@@ -135,11 +145,10 @@ def merge_returns(ceos: pd.DataFrame, ccm: pd.DataFrame, msf: pd.DataFrame) -> p
         else:
             fwd_ret = np.prod(1 + sec["ret"].values) - 1
             n_months = sec.shape[0]
-        records.append((row.gvkey, row.execid, row.fyear, fwd_ret, n_months))
+        records.append((fwd_ret, n_months))
 
-    ret_df = pd.DataFrame(records, columns=["gvkey", "execid", "fyear", "fwd_12m_bhar", "n_ret_months"])
-    merged = panel.merge(ret_df, on=["gvkey", "execid", "fyear"], how="left")
-    merged = merged.drop_duplicates(subset=["gvkey", "execid", "fyear"])
+    ret_df = pd.DataFrame(records, columns=["fwd_12m_bhar", "n_ret_months"], index=panel.index)
+    merged = panel.join(ret_df)
     return merged
 
 
@@ -221,6 +230,7 @@ def main() -> None:
     try:
         ceos = pull_execucomp_ceos(conn, cfg.start_year, cfg.end_year)
         ceos = add_prior_ceo_experience(ceos)
+        ceos = ceos[(ceos["fyear"] >= cfg.start_year) & (ceos["fyear"] <= cfg.end_year)].copy()
         ccm = pull_ccm_links(conn)
         msf = pull_monthly_returns(conn, cfg.start_year, cfg.end_year)
         merged = merge_returns(ceos, ccm, msf)
